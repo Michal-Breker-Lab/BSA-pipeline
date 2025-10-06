@@ -1,0 +1,28 @@
+module_order:
+  - "samtools"
+  - "picard"
+  - "fastqc":
+      name: "FastQC: clean"
+      anchor: "fqc_clean"
+      path_filters:
+        - "*/fastqc_trimmed/*"
+  - "fastp"
+  - "fastqc":
+      name: "FastQC: raw"
+      anchor: "fqc_raw"
+      path_filters:
+        - "*/fastqc_raw/*"
+
+use_filename_as_sample_name: true
+
+fastp:
+  s_name_filenames: true
+
+extra_fn_clean_exts:
+  - type: remove
+    pattern: .metrics
+
+table_sample_merge:
+  "R1": "_R1"
+  "R2": "_R2"
+

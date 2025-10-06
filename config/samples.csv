@@ -1,0 +1,3 @@
+sample_name,R1,R2,Experiment,Condition
+Mutant,data/reads/Mutant_R1.fastq.gz,data/reads/Mutant_R2.fastq.gz,Test,Mutant
+WildType,data/reads/WildType_R1.fastq.gz,data/reads/WildType_R2.fastq.gz,Test,WT
