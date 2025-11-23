@@ -6,14 +6,18 @@ multiqc_config: "config/multiqc_config.yaml"
 ref_fasta: "data/ref.fa"
 # Path to BED file with masked regions
 regions_to_mask: "data/repeatmasked.bed"
+# Path to GFF annotation file
+gff_annotation: "data/annotation.gff3"
 
-snpEff:
-  # Currently SnpEff works only with already created DBs
-  custom_db: "data/snpeff_db"
-  # Additional options for snpEff
-  # extra: "-no-downstream -no-upstream"
+vep:
+  # Shift indels to the most 3prime 
+  shift_3prime: True
+  # Add hgvs annotation
+  hgvs: True
+  # Additional options for VEP
   extra: ""
-# Set true to remove duplicate reads with picard
+
+# Remove duplicate reads with picard
 remove_duplicates : False
 
 params:
@@ -28,14 +32,15 @@ candidate_mutations:
   # Minimum depth in the samples to consider a variant
   min_dp: 10
   # Minimum difference in allele frequency between WT and Mutant to report a variant
-  report_delta: 0.97
+  report_delta: 0.9
   # Minimum difference in allele frequency between WT and Mutant to plot a variant
   plot_delta: 0.5
   # Set true to not reporting variants in masked regions
   skip_masked: False
-  # Set true to keep all annotations from SnpEff in the final table
-  keep_all_annotations: False
+  # Set true to keep all annotations from VEP in the final table
+  keep_all_annotations: True
   # You can set different delta thresholds for different sequences (e.g. organellar genomes)
   #delta_seq_name:
+  #  chr_1 : 0.5
   #  mitogenome : 0.05
   #  plastome : 0.05

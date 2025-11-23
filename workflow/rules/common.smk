@@ -44,6 +44,7 @@ def get_fastqc_raw_reads(wildcards):
     else:
         raise ValueError(f"'fq' wildcard {wildcards.fq} is invalid")
 
+
 def get_bam(wildcards):
     if config["remove_duplicates"]:
         return f"results/mapping/{wildcards.sample}.dedup.bam"
@@ -72,18 +73,18 @@ def get_bai_experiment(wildcards):
         f"results/mapping/{{sample}}{dedup}.bam.bai", sample=experiment_df.index
     )
 
-def get_snpeff_input(wildcards):
+def get_annotation_input(wildcards):
     if config.get("regions_to_mask"):
-        return "results/calling/{experiment}.overlaps.vcf.gz" #rules.mask_vcf.output.vcf
+        return "results/calling/{experiment}.overlaps.vcf.gz"
 
-    return "results/calling/{experiment}.norm.vcf.gz" #rules.norm_vcf.output
+    return "results/calling/{experiment}.norm.vcf.gz"
 
 
 def get_candidate_mutations_input(wildcards):
-    if config.get("snpEff", {}).get("custom_db"):
-        return "results/calling/{experiment}.annot.vcf.gz" #rules.snpeff.output.calls
+    if config.get("gff_annotation", {}):
+        return "results/calling/{experiment}.annot.vcf.gz"
 
-    return get_snpeff_input(wildcards)
+    return get_annotation_input(wildcards)
 
 def get_regions_to_mask(wildcards):
     if config.get("regions_to_mask"):
@@ -91,11 +92,6 @@ def get_regions_to_mask(wildcards):
 
     return None
 
-def get_snpeff_db(wildcards):
-    if config.get("snpEff", {}).get("custom_db"):
-        return config.get("snpEff", {}).get("custom_db")
-
-    return None
 
 def get_bed(wildcards):
     masking_file = Path(config["regions_to_mask"])
@@ -117,7 +113,7 @@ def get_wt_samples(wildcards):
 
 
 def get_vcf_to_analyze(wildcard):
-    if config["snpEff"]["custom_db"]:
+    if config["gff_annotation"]:
         return "results/calling/{experiment}.annot.vcf.gz"
 
     return "results/calling/{experiment}.norm.vcf.gz"
@@ -220,9 +216,17 @@ def get_final_output(wildcards):
     )
     output.extend(
         expand(
+            "results/calling/{experiment}.annot.vcf.gz",
+            experiment=experiments
+        )
+    )
+    
+    output.extend(
+        expand(
             "results/candidate_mutations/{experiment}.tsv",
             experiment=experiments,
         )
     )
+    
 
     return output

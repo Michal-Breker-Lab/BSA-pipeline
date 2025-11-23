@@ -4,6 +4,7 @@ import sys
 sys.stderr = sys.stdout
 sys.stdout = open(snakemake.log[0], "w")
 
+import re
 from cyvcf2 import VCF
 from pathlib import Path
 import pandas as pd
@@ -12,29 +13,54 @@ import matplotlib.pyplot as plt
 from matplotlib.lines import Line2D
 
 
-def ann2df(ann, alt, all_annot=True):
-    #https://pcingola.github.io/SnpEff/adds/VCFannotationformat_v1.0.pdf
-    names = ['Allele', 'Annotation', 'Putative_impact',
-             'Gene_Name', 'Gene_ID', 'Feature_type',
-             'Feature_ID', 'Transcript_biotype', 'Rank/total',
-             'HGVS.c', 'HGVS.p', 'cDNA_position',
-             'CDS_position', 'Protein_position', 'Distance_to_feature',
-             'Info/Warnings/Errors'
-             ]
+def ann2df(ann, alt):
+    vep_severity_order = [
+        "transcript_ablation",
+        "splice_acceptor_variant",
+        "splice_donor_variant",
+        "stop_gained",
+        "frameshift_variant",
+        "stop_lost",
+        "start_lost",
+        "initiator_codon_variant",
+        "inframe_insertion",
+        "inframe_deletion",
+        "missense_variant",
+        "protein_altering_variant",
+        "splice_region_variant",
+        "incomplete_terminal_codon_variant",
+        "stop_retained_variant",
+        "synonymous_variant",
+        "coding_sequence_variant",
+        "mature_miRNA_variant",
+        "5_prime_UTR_variant",
+        "3_prime_UTR_variant",
+        "non_coding_transcript_exon_variant",
+        "intron_variant",
+        "NMD_transcript_variant",
+        "non_coding_transcript_variant",
+        "upstream_gene_variant",
+        "downstream_gene_variant",
+        "intergenic_variant"
+    ]
+    severity_rank = {term: i for i, term in enumerate(vep_severity_order)}
     data = [record.split('|') for record in ann.split(',')]
-    df = pd.DataFrame(data, columns=names)
-    df_alt = df.loc[df['Allele'] == alt].drop('Allele', axis=1)
-    # I'm not sure how to resolve the problem when allele seq in ANN is not equal to ALT
-    # In this situation i will report everything
-    if df_alt.empty:
-        print('ERROR, ALT allele is not found in ANN field')
-        print(alt)
-        print(df)
-        print('\n')
-        return df
-    if all_annot:
-        return df_alt
-    return df_alt.iloc[[0]]
+    df = pd.DataFrame(data, columns=annot_fields)
+    df = df.loc[df["ALLELE_NUM"] == str(alt)]
+
+    def get_severity_rank(consequence_str):
+        """
+        Handles cases like: 'missense_variant&splice_region_variant'
+        Most severe term = smallest rank.
+        """
+        terms = consequence_str.split('&')
+        ranks = [severity_rank.get(t, 9999) for t in terms]  # unknown = very low severity
+        return min(ranks)
+
+    df["severity_rank"] = df["Consequence"].apply(get_severity_rank)
+    df = df.sort_values("severity_rank").drop(columns="severity_rank")
+    
+    return df
 
 
 def delta_no_wt(prop, threshold):
@@ -83,12 +109,15 @@ delta_seq_name = snakemake.config['candidate_mutations'].get("delta_seq_name", {
 
 vcf = VCF(snakemake.input.vcf)
 sample_names = vcf.samples
+# Extract VEP column names from VCF INFO field
+annot_description = re.search(r'##INFO=<ID=CSQ[^>]*Format: ([^"]+)"', vcf.raw_header)
+annot_fields = annot_description.group(1).split('|') if annot_description else []
 
 records = []
 plot_data = []
 
 if plot_delta > report_delta:
-    raise ValueError(f"plot_delta cannot be larger than report_delta")
+    raise ValueError(f"'plot_delta' cannot be larger than 'report_delta'")
 
 for record in vcf:
     if record.FILTER and skip_masked:
@@ -133,39 +162,49 @@ for record in vcf:
 
         if abs(delta) < record_report_delta:
                 continue
-            
+
         allele_record = {
+            "REC_ID": len(records) + 1,
             "CHROM": record.CHROM,
             "POS": record.POS,
             "REF": record.REF,
             "ALT": "|".join(record.ALT),  # ALT is 0-based
             "FILTER": record.FILTER,
-            "Sample": sample,
-            "ALT_index": alt_idx,
-            "AD_sample": "|".join(map(str,ad_array[sample_idx])),
             "WT": passed_sample_names[wt_idx],
+            "Sample": sample,
             "AD_wt": "|".join(map(str,ad_array[wt_idx])),
+            "AD_sample": "|".join(map(str,ad_array[sample_idx])),
+            "ALT_index": alt_idx,
             "delta": round(delta, 3)
         }
-
+        
         allele_df = pd.DataFrame([allele_record])
-        if record.INFO.get('ANN'):
-            annot_df = ann2df(
-                record.INFO.get('ANN'),
-                record.ALT[alt_idx - 1],
-                all_annot=keep_all_annotations
-            )
+        ann_record = record.INFO.get('CSQ', '')
 
-            allele_df['key'] = 1
-            annot_df['key'] = 1
-
-            record_df = pd.merge(allele_df, annot_df, on='key').drop(columns='key')
-            records.append(record_df)
-        else:
+        # If CSQ field is missing append without annotation
+        if not ann_record:
             records.append(allele_df)
+            continue
+
+        annot_df = ann2df(ann_record, alt_idx)
+        # Keep only most severe if not specified
+        if not keep_all_annotations:
+            annot_df = annot_df.iloc[[0]]
+        
+        # Cartesian join
+        allele_df["key"] = 1
+        annot_df["key"]   = 1
+
+        merged_df = (
+            allele_df
+            .merge(annot_df, on="key")
+            .drop(columns="key")
+        )
+        
+        records.append(merged_df)
 
 if records:
-    df = pd.concat(records)
+    df = pd.concat(records, ignore_index=True).dropna(axis=1, how="all")
 else:
     df = pd.DataFrame(columns=["CHROM", "POS", "REF", "ALT", "FILTER", "Sample"])
 
@@ -201,7 +240,7 @@ for chr, sample in plot_df[['CHROM', 'Sample']].drop_duplicates().values:
         label=None
     )
     plt.title(f"{sample}:{chr}")
-    plt.axhline(y=delta_seq_name.get(chr, plot_delta), color="red", linestyle="--", linewidth=1)
+    plt.axhline(y=delta_seq_name.get(chr, report_delta), color="red", linestyle="--", linewidth=1)
     plt.ylim(delta_seq_name.get(chr, plot_delta) - 0.02, 1.02)
     plt.ylabel("Absolute delta SNP index")
     plt.xlabel("Genomic position")
