@@ -3,7 +3,12 @@ rule bwa_mem:
         reads=rules.fastp_pe.output.trimmed,
         idx=rules.bwa_index_ref.output.idx,
     output:
-        bam="results/mapping/{sample}.bam",
+        # Only an intermediate when duplicates are removed downstream.
+        bam=(
+            temp("results/mapping/{sample}.bam")
+            if config.get("remove_duplicates")
+            else "results/mapping/{sample}.bam"
+        ),
     log:
         "logs/bwa_mem/{sample}.log",
     params:

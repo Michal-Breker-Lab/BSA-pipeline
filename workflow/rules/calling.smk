@@ -60,6 +60,7 @@ rule mask_vcf:
         bed=get_masked_regions_bed,
     output:
         vcf=temp("results/calling/{experiment}.masked.vcf.gz"),
+        tbi=temp("results/calling/{experiment}.masked.vcf.gz.tbi"),
     log:
         "logs/mask_vcf/{experiment}.log",
     conda:

@@ -136,8 +136,11 @@ def delta_no_wt(prop, threshold):
         delta[delta < 0] = np.nan  # Only consider cases where mutant > other samples
         # Check if there's a sample with significantly lower frequency (potential WT)
         if np.any(delta >= 0) and np.nanmin(delta) >= threshold:
-            wt_index = np.nanargmax(delta)  # Sample with largest delta (lowest ALT freq)
-            snp_data.append([r,c,np.nanmin(delta), wt_index])
+            # Report the sample that produced the *smallest* delta -- the binding
+            # constraint, and the same delta returned below. Using nanargmax here
+            # named a different sample than the delta beside it in the output.
+            wt_index = np.nanargmin(delta)
+            snp_data.append([r, c, delta[wt_index], wt_index])
     return snp_data
 
 
@@ -229,7 +232,9 @@ for record in vcf:
     # Filter samples: keep only those with valid genotypes and sufficient depth
     passed_genotypes = [i for i,g in enumerate(record.genotypes) if g[0] >= 0]  # Valid genotype (not missing)
     passed_ad_dp = np.where(ad_array.sum(axis=1) >= min_dp)[0]  # Total depth >= min_dp
-    passed_samples_idx = list(set(passed_genotypes) & set(passed_ad_dp))
+    # sorted(), not list(): these indices must stay row-aligned with both
+    # ad_array and sample_names, and set iteration order is not a contract.
+    passed_samples_idx = sorted(set(passed_genotypes) & set(passed_ad_dp))
 
     # Subset AD array to only passed samples
     ad_array = ad_array[passed_samples_idx]
@@ -349,8 +354,18 @@ mask = plot_df.set_index(['CHROM', 'Sample']).index.isin(
 )
 plot_df = plot_df[mask]
 
-info_file = Path(snakemake.output.info)
-plot_dir = info_file.parent
+plot_dir = Path(snakemake.output.plots)
+plot_dir.mkdir(parents=True, exist_ok=True)
+info_file = plot_dir / "info.txt"
+
+
+def safe_filename(*parts):
+    """Join name parts into a filesystem-safe filename stem.
+
+    Sequence IDs routinely contain '.' and '|', and the previous
+    '{sample}:{chrom}' pattern is not a legal filename on Windows or SMB.
+    """
+    return "__".join(re.sub(r"[^A-Za-z0-9._-]", "_", str(p)) for p in parts)
 
 # Generate one plot per chromosome-sample combination
 for chr, sample in plot_df[['CHROM', 'Sample']].drop_duplicates().values:
@@ -413,8 +428,9 @@ for chr, sample in plot_df[['CHROM', 'Sample']].drop_duplicates().values:
     plt.tight_layout()
     
     # Save plot in both PNG (raster) and SVG (vector) formats
-    plt.savefig(plot_dir / f"{sample}:{chr}.png", dpi=300)
-    plt.savefig(plot_dir / f"{sample}:{chr}.svg", dpi=300)
+    stem = safe_filename(sample, chr)
+    plt.savefig(plot_dir / f"{stem}.png", dpi=300)
+    plt.savefig(plot_dir / f"{stem}.svg", dpi=300)
     plt.close()
 
 # Write summary info file

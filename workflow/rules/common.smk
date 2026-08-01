@@ -1,5 +1,8 @@
+import re
+
 import pandas as pd
 from pathlib import Path
+from snakemake.exceptions import WorkflowError
 
 
 samples = pd.read_csv(config["samples"], dtype=str, comment="#").set_index(
@@ -10,24 +13,88 @@ ncbi_assemblies = config["ref"].get("ncbi", {}).get("assemblies", [])
 ncbi_sequences = config["ref"].get("ncbi", {}).get("sequences", [])
 
 
+def validate_samples(samples):
+    """Reject sample sheets the workflow cannot actually process.
+
+    Both conditions below used to fail deep inside a wrapper (or, worse,
+    silently pass the same BAM to the caller twice), so they are caught here
+    while the error can still name the offending row.
+    """
+    required = ["sample_name", "R1", "R2", "Experiment", "Condition"]
+    missing_columns = [c for c in required if c not in samples.columns]
+    if missing_columns:
+        raise WorkflowError(
+            f"Missing column(s) in {config['samples']}: "
+            f"{', '.join(missing_columns)}. Required: {', '.join(required)}."
+        )
+
+    duplicated = samples.index[samples.index.duplicated()].unique().tolist()
+    if duplicated:
+        raise WorkflowError(
+            f"Duplicate sample_name(s) in {config['samples']}: "
+            f"{', '.join(duplicated)}. "
+            "Each sample must appear exactly once; multiple sequencing runs "
+            "per sample are not supported."
+        )
+
+    missing_r2 = samples.index[samples["R2"].isna()].tolist()
+    if missing_r2:
+        raise WorkflowError(
+            f"Sample(s) with no R2 in {config['samples']}: "
+            f"{', '.join(missing_r2)}. "
+            "This workflow supports paired-end reads only."
+        )
+
+
+validate_samples(samples)
+
+
+def name_alternatives(names):
+    """Regex alternation over literal names, longest first.
+
+    re.escape matters because a sample name containing '.', '+' or '(' would
+    otherwise be interpolated into the constraint as a metacharacter.
+    """
+    return "|".join(re.escape(n) for n in sorted(set(names), key=len, reverse=True))
+
+
 wildcard_constraints:
-    sample="|".join(samples["sample_name"].tolist()),
-    fq="R1|R2|single",
-    experiment="|".join(experiments),
+    sample=name_alternatives(samples["sample_name"].tolist()),
+    fq="R1|R2",
+    experiment=name_alternatives(experiments),
 
 
-def get_ref_fasta(wildcards):
-    cfg_ref = config["ref"]
-    cfg_fasta = cfg_ref.get("fasta", None)
+# The reference is staged into resources/ref/ and indexed there, so that bwa
+# and samtools never write their index files next to the user's own FASTA
+# (which may live on a read-only or shared path).
+REF_FASTA = "resources/ref/reference.fa"
+
+
+def get_ref_source():
+    """Path the staged reference is built from. Evaluated at parse time."""
+    cfg_fasta = config["ref"].get("fasta", None)
 
     if cfg_fasta:
         if not Path(cfg_fasta).exists():
-            raise ValueError(f"The specified reference FASTA file does not exist: {cfg_fasta}")
+            raise WorkflowError(
+                f"The specified reference FASTA file does not exist: {cfg_fasta}"
+            )
+        if Path(cfg_fasta) == Path(REF_FASTA):
+            raise WorkflowError(
+                f"ref: fasta must not point at {REF_FASTA}; that path is "
+                "reserved for the staged copy built by the workflow."
+            )
         return cfg_fasta
     elif ncbi_assemblies or ncbi_sequences:
         return "resources/ref/ncbi_ref.fa"
     else:
-        raise ValueError("No reference FASTA file or NCBI accession was provided in the config.")
+        raise WorkflowError(
+            "No reference FASTA file or NCBI accession was provided in the config."
+        )
+
+
+def get_ref_fasta(wildcards):
+    return REF_FASTA
 
 
 def get_annot_gff(wildcards):
@@ -36,11 +103,19 @@ def get_annot_gff(wildcards):
     if fasta_provided and config["ref"].get("gff", None):
         gff = config["ref"]["gff"]
         if not Path(gff).exists():
-            raise ValueError(f"The specified GFF file does not exist: {gff}")
+            raise WorkflowError(f"The specified GFF file does not exist: {gff}")
         return gff
     # Use NCBI GFF file only if there is no "fasta" file
     elif not fasta_provided and (ncbi_assemblies or ncbi_sequences):
         return "resources/ref/ncbi_annot.gff"
+    elif config["annotate"]:
+        # Falling through to None here used to silently drop VEP annotation
+        # from the candidate table with no explanation.
+        raise WorkflowError(
+            "annotate is true but no annotation is available: set ref: gff "
+            "(alongside ref: fasta), or use the ref: ncbi options, or set "
+            "annotate: false."
+        )
 
 
 def get_masked_regions_bed(wildcards):
@@ -59,35 +134,17 @@ def get_masked_regions_bed(wildcards):
         )
 
 
-def is_single(sample_name):
-    sample = samples.loc[sample_name]
-
-    if pd.isna(sample["R2"]):
-        return True
-
-    return False
-
-
 def get_raw_reads(wildcards):
+    # validate_samples guarantees one row per sample, both mates present.
     sample = samples.loc[wildcards.sample]
-    # TEMP solution?
-    if isinstance(sample, pd.DataFrame):
-        dup = sample.duplicated(subset=["sample_name", "R1", "R2"], keep=False)
-        if dup.all():
-            sample = sample.iloc[0]
-        else:
-            raise ValueError(f"{wildcards.sample} has more than one set of reads")
-    if pd.isna(sample["R2"]):
-        return [sample["R1"]]
-
     return sample["R1"], sample["R2"]
 
 
 def get_fastqc_raw_reads(wildcards):
-    if wildcards.fq == "R2":
-        return get_raw_reads(wildcards)[1]
-    if wildcards.fq in ["single", "R1"]:
+    if wildcards.fq == "R1":
         return get_raw_reads(wildcards)[0]
+    elif wildcards.fq == "R2":
+        return get_raw_reads(wildcards)[1]
     else:
         raise ValueError(f"'fq' wildcard {wildcards.fq} is invalid")
 
@@ -143,19 +200,11 @@ def get_wt_samples(wildcards):
 def multiqc_input(wildcards):
     output = []
     experiment_df = samples.loc[samples["Experiment"] == wildcards.experiment]
-    pe_samples = experiment_df[experiment_df["R1"].notna() & experiment_df["R2"].notna()].index
-    se_samples = experiment_df[experiment_df["R1"].notna() & experiment_df["R2"].isna()].index
 
     output.extend(
         expand(
-            "results/qc/fastqc_raw/{sample}_single_fastqc.zip",
-            sample=se_samples,
-        )
-    )
-    output.extend(
-        expand(
             "results/qc/fastqc_raw/{sample}_{fq}_fastqc.zip",
-            sample=pe_samples,
+            sample=experiment_df.index,
             fq=["R1", "R2"],
         )
     )
@@ -167,27 +216,8 @@ def multiqc_input(wildcards):
     )
     output.extend(
         expand(
-            "results/qc/fastqc_trimmed/{sample}_single_fastqc.zip",
-            sample=se_samples,
-        )
-    )
-    output.extend(
-        expand(
             "results/qc/fastqc_trimmed/{sample}_{fq}_fastqc.zip",
-            sample=pe_samples,
-            fq=["R1", "R2"],
-        )
-    )
-    output.extend(
-        expand(
-            "results/qc/fastqc_trimmed/{sample}_single_fastqc.zip",
-            sample=se_samples,
-        )
-    )
-    output.extend(
-        expand(
-            "results/qc/fastqc_trimmed/{sample}_{fq}_fastqc.zip",
-            sample=pe_samples,
+            sample=experiment_df.index,
             fq=["R1", "R2"],
         )
     )

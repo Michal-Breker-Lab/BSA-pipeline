@@ -44,8 +44,10 @@ remove_duplicates: false
 # will be mask 
 mask_regions: true
 # Annotate variants with VEP
-# Provide GFF file if you not downloading NCBI reference
-annotate: true
+# Requires an annotation: either ref: gff (alongside ref: fasta) or the
+# ref: ncbi options. Setting this to true without one is now an error
+# rather than silently producing an unannotated table.
+annotate: false
 
 # ----------------------------------------------------------------------------
 # Variant Calling Parameters

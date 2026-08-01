@@ -46,13 +46,25 @@ if not config["ref"].get("fasta", None):
         shell:
             "cat {input} > {output.gff} 2> {log}" 
 
+# The reference is staged into resources/ref/ so that every index below is
+# written beside the staged copy rather than beside the user's own FASTA,
+# which may sit on a read-only or shared path.
+rule stage_reference:
+    input:
+        get_ref_source(),
+    output:
+        REF_FASTA,
+    log:
+        "logs/ref/stage_reference.log",
+    shell:
+        "ln -sfr {input} {output} 2> {log}"
+
+
 rule bwa_index_ref:
     input:
-        get_ref_fasta,
+        REF_FASTA,
     output:
-        idx=multiext(
-            get_ref_fasta(""), ".amb", ".ann", ".bwt", ".pac", ".sa"
-        ),
+        idx=multiext(REF_FASTA, ".amb", ".ann", ".bwt", ".pac", ".sa"),
     log:
         "logs/bwa_index_ref/reference.log",
     threads: 6
@@ -62,9 +74,9 @@ rule bwa_index_ref:
 
 rule samtools_index_ref:
     input:
-        get_ref_fasta,
+        REF_FASTA,
     output:
-        f"{get_ref_fasta("")}.fai",
+        f"{REF_FASTA}.fai",
     log:
         "logs/samtools_index_ref/reference.log",
     threads: 6

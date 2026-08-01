@@ -53,7 +53,7 @@ def download_assembly(assembly_acc, out_dir):
         if len(gff_file) == 1:
             shutil.move(gff_file[0], gff_out_path)
         else:
-            print("Warning:{assembly_acc} GFF file not found")
+            print(f"Warning: {assembly_acc} GFF file not found")
             Path(gff_out_path).touch()
 
 

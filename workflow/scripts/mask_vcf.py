@@ -15,7 +15,10 @@ with tempfile.TemporaryDirectory() as tmpdir:
         " -a {tmpdir}/exclude.filt.bed.gz"
         " -h {tmpdir}/add_overlap.hdr"
         " -c CHROM,FROM,TO,FILTER"
-        " -O v -o {snakemake.output.vcf}"
-        " {snakemake.input.vcf}"
+        # -O z, not -O v: the output path ends in .vcf.gz and downstream
+        # consumers (VEP, cyvcf2) require it to actually be BGZF-compressed
+        " -O z -o {snakemake.output.vcf}"
+        " {snakemake.input.vcf} &&"
+        " bcftools index -t {snakemake.output.vcf}"
         ") {log}"
     )

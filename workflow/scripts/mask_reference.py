@@ -4,26 +4,22 @@ import sys
 sys.stdout = sys.stderr
 sys.stderr = sys.stdout = open(snakemake.log[0], "w")
 
+import re
+
 from Bio import SeqIO
 
-def find_repeats(seq):
-    """Finds lowercase (repeat) regions in a sequence."""
-    regions = []
-    in_repeat = False
-    start = 0
+# Anything that is not an uppercase A/T/G/C: soft-masked (lowercase) repeats
+# plus ambiguity codes and N runs.
+NON_ACGT = re.compile(r"[^ATGC]+")
 
-    for i, base in enumerate(seq):
-        if base not in "ATGC":
-            if not in_repeat:
-                start = i
-                in_repeat = True
-        else:
-            if in_repeat:
-                regions.append((start, i))
-                in_repeat = False
-    if in_repeat:
-        regions.append((start, len(seq)))
-    return regions
+def find_repeats(seq):
+    """Finds masked (lowercase or ambiguous) regions in a sequence.
+
+    Returns 0-based half-open (start, end) intervals -- BED convention.
+    Uses one regex scan rather than a per-base Python loop, which took
+    minutes to hours on a real assembly.
+    """
+    return [m.span() for m in NON_ACGT.finditer(seq)]
 
 def fasta_to_bed(input_fasta, output_bed):
     with open(output_bed, "w") as bed:

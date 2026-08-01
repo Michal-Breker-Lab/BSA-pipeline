@@ -9,14 +9,23 @@ rule prepare_gff:
     conda:
         "../envs/bcftools.yaml"
     shell:
-        # I use sed '/^#/d' and not just grep -v "^#" 
+        # I use sed '/^#/d' and not just grep -v "^#"
         # Because if the input file is empty grep fails
+        #
+        # The whole pipeline is wrapped in ( ) so that a sed or sort failure
+        # reaches the log too -- '2> {log}' on the last stage alone captured
+        # only bgzip's stderr. pipefail makes such a failure fail the rule
+        # instead of leaving a silently truncated GFF for tabix to index.
+        # LC_ALL=C keeps the coordinate sort independent of the host locale.
         """
+        (
+        set -o pipefail
         sed '/^#/d' {input.gff} \
-        | sort -t$'\t' -k1,1 -k4,4n -k5,5n \
-        | bgzip -c > {output.gff} 2> {log};
+        | LC_ALL=C sort -T $(dirname {output.gff}) -t$'\t' -k1,1 -k4,4n -k5,5n \
+        | bgzip -c > {output.gff}
 
-        tabix -p gff {output.gff} 2>> {log}
+        tabix -p gff {output.gff}
+        ) 2> {log}
         """
 
 rule plugins_folder:
