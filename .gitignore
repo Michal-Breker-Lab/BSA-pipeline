@@ -2,4 +2,17 @@ logs/**
 resources/**
 results/**
 .snakemake/**
+# data/ holds tens of GB of real reads, so ignore it by default -- but keep
+# the small toy dataset the Test experiment runs on, so that a fresh clone can
+# verify the pipeline end to end. The reference.fa.{amb,ann,bwt,fai,pac,sa}
+# indices stay ignored: they are derived, and since the stage_reference rule
+# they are generated into resources/ref/ rather than beside the FASTA.
 data/**
+!data/reads/
+!data/reads/Mut_R1.fq
+!data/reads/Mut_R2.fq
+!data/reads/WT_R1.fq
+!data/reads/WT_R2.fq
+!data/mut.csv
+!data/mut.fa
+!data/reference.fa
