@@ -17,4 +17,4 @@ rule fastp_pe:
         extra=config["params"]["fastp"],
     threads: 2
     wrapper:
-        "v7.2.0/bio/fastp"
+        "v9.15.0/bio/fastp"

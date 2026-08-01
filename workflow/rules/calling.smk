@@ -13,7 +13,7 @@ rule freebayes:
         extra=f"--pooled-continuous {config['params']['freebayes']['extra']}",
     threads: 30
     wrapper:
-        "v7.2.0/bio/freebayes"
+        "v9.15.0/bio/freebayes"
 
 
 rule norm_vcf:
@@ -25,7 +25,7 @@ rule norm_vcf:
     log:
         "logs/norm_vcf/{experiment}.log",
     wrapper:
-        "v7.2.0/bio/bcftools/norm"
+        "v9.15.0/bio/bcftools/norm"
 
 rule mask_reference:
     input:

@@ -18,7 +18,7 @@ rule bwa_mem:
         sort_extra="",
     threads: 8
     wrapper:
-        "v7.2.0/bio/bwa/mem"
+        "v9.15.0/bio/bwa/mem"
 
 
 rule removeduplicates_bam:
@@ -32,7 +32,7 @@ rule removeduplicates_bam:
     log:
         "logs/removeduplicates_bam/{sample}.log"
     wrapper:
-        "v7.2.0/bio/picard/markduplicates"
+        "v9.15.0/bio/picard/markduplicates"
 
 rule samtools_index:
     input:
@@ -45,7 +45,7 @@ rule samtools_index:
         extra="",
     threads: 4
     wrapper:
-        "v7.2.0/bio/samtools/index"
+        "v9.15.0/bio/samtools/index"
 
 rule samtools_index_markdup:
     input:
@@ -58,4 +58,4 @@ rule samtools_index_markdup:
         extra="",
     threads: 4
     wrapper:
-        "v7.2.0/bio/samtools/index"
+        "v9.15.0/bio/samtools/index"

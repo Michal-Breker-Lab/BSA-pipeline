@@ -69,7 +69,7 @@ rule bwa_index_ref:
         "logs/bwa_index_ref/reference.log",
     threads: 6
     wrapper:
-        "v7.2.0/bio/bwa/index"
+        "v9.15.0/bio/bwa/index"
 
 
 rule samtools_index_ref:
@@ -81,4 +81,4 @@ rule samtools_index_ref:
         "logs/samtools_index_ref/reference.log",
     threads: 6
     wrapper:
-        "v7.2.0/bio/samtools/faidx"
+        "v9.15.0/bio/samtools/faidx"

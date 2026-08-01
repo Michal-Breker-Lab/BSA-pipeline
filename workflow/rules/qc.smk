@@ -11,7 +11,7 @@ rule fastqc_raw:
     resources:
         mem_mb = 1024,
     wrapper:
-        "v7.2.0/bio/fastqc"
+        "v9.15.0/bio/fastqc"
 
 
 rule fastqc_trimmed:
@@ -27,7 +27,7 @@ rule fastqc_trimmed:
     resources:
         mem_mb = 1024,
     wrapper:
-        "v7.2.0/bio/fastqc"
+        "v9.15.0/bio/fastqc"
 
 
 rule samtools_stats:
@@ -40,7 +40,7 @@ rule samtools_stats:
     log:
         "logs/samtools_stats/{sample}.log",
     wrapper:
-        "v7.2.0/bio/samtools/stats"
+        "v9.15.0/bio/samtools/stats"
 
 
 rule samtools_idxstats:
@@ -54,7 +54,7 @@ rule samtools_idxstats:
     params:
         extra="",
     wrapper:
-        "v7.2.0/bio/samtools/idxstats"
+        "v9.15.0/bio/samtools/idxstats"
 
 
 rule samtools_coverage:
@@ -83,7 +83,7 @@ rule insert_size:
     params:
         extra="--VALIDATION_STRINGENCY LENIENT --METRIC_ACCUMULATION_LEVEL null --METRIC_ACCUMULATION_LEVEL SAMPLE",
     wrapper:
-        "v7.2.0/bio/picard/collectinsertsizemetrics"
+        "v9.15.0/bio/picard/collectinsertsizemetrics"
 
 
 rule multiqc:
@@ -98,4 +98,4 @@ rule multiqc:
     log:
         "logs/multiqc/{experiment}.log",
     wrapper:
-        "v7.2.0/bio/multiqc"
+        "v9.15.0/bio/multiqc"
