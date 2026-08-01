@@ -1,3 +1,3 @@
 sample_name,R1,R2,Experiment,Condition
-Mutant,data/reads/Mutant_R1.fastq.gz,data/reads/Mutant_R2.fastq.gz,Test,Mutant
-WildType,data/reads/WildType_R1.fastq.gz,data/reads/WildType_R2.fastq.gz,Test,WT
+Mutant,data/reads/Mut_R1.fq,data/reads/Mut_R2.fq,Test,Mutant
+WildType,data/reads/WT_R1.fq,data/reads/WT_R2.fq,Test,WT

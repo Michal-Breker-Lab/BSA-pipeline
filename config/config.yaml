@@ -1,46 +1,123 @@
+# ============================================================================
+# BSA (Bulk Segregant Analysis)
+# ============================================================================
+
+# ----------------------------------------------------------------------------
+# Input Files and Resources
+# ----------------------------------------------------------------------------
 # Path to sample sheet (CSV format)
+# Expected columns: sample_name, Experiment, R1, R2 (optional)
 samples: "config/samples.csv"
-# Path to MultiQC config
+
+# Path to MultiQC configuration file
 multiqc_config: "config/multiqc_config.yaml"
-# Path to reference fasta file
-ref_fasta: "data/ref.fa"
-# Path to BED file with masked regions
-regions_to_mask: "data/repeatmasked.bed"
-# Path to GFF annotation file
-gff_annotation: "data/annotation.gff3"
 
-vep:
-  # Shift indels to the most 3prime 
-  shift_3prime: True
-  # Add hgvs annotation
-  hgvs: True
-  # Additional options for VEP
-  extra: ""
+ref:
+  # Path to reference genome FASTA file
+  fasta: "data/reference.fa"
+  # Path to GFF3 annotation file for variant annotation
+  #gff: resources/ref/ncbi_annot.gff #"data/annotation.gff3"
+  # Path to BED file with regions to mask (e.g., repetitive regions)
+  # Can be a BED or GFF file
+  #masked_regions: "data/repeatmasked.bed"
+  # You can specify NCBI assemblies and/or sequences (mitogenome,chloroplast) to use as reference
+  # All retrieved FASTA and GFF files will be concatenated
+  # and saved as "resources/ref/ncbi_ref.fa" and "resources/ref/ncbi_annot.gff" files
+  # Note: Works only if "fasta" is not specified
+  # Note: If you wish to use NCBI option, "gff" and "masked_regions" params will be ignored
+  ncbi:
+    #assemblies: 
+    #  - "GCA_025026875.1"
+    #sequences:
+      #- "XM_043058199.1"
+      #- "NC_063650.1"
+      #- "NC_023835.1"
+    # Provide an Email if you wish to use sequences
+    email: "your@email.com"
 
-# Remove duplicate reads with picard
-remove_duplicates : False
+# ----------------------------------------------------------------------------
+# Workflow Options
+# ----------------------------------------------------------------------------
+# Remove duplicate reads using Picard MarkDuplicates
+remove_duplicates: false
+# If masked_regions file is not provided ambiguous and lowercase nucleotides
+# will be mask 
+mask_regions: true
+# Annotate variants with VEP
+# Provide GFF file if you not downloading NCBI reference
+annotate: true
 
+# ----------------------------------------------------------------------------
+# Variant Calling Parameters
+# ----------------------------------------------------------------------------
 params:
-  #fastp: "-g -l 35 -q 20"
+  # fastp trimming parameters
+  # Additional command-line options for fastp (e.g., "-g -l 35 -q 20")
+  # Leave empty string for default behavior
   fastp: ""
+  
+  # FreeBayes variant calling parameters
   freebayes:
-    #extra: "--use-best-n-alleles 4 --min-mapping-quality 30 -q 20"
-    extra: ""
+    # Additional command-line options for FreeBayes
+    # Example: "--use-best-n-alleles 4 --min-mapping-quality 30 -q 20"
+    extra: "--min-alternate-count 0"
+    
+    # Chunk size for processing large genomes (in base pairs)
+    # Larger values = fewer chunks but more memory usage
     chunksize: 100000
 
+
+# ----------------------------------------------------------------------------
+# VEP (Variant Effect Predictor) Annotation
+# ----------------------------------------------------------------------------
+vep:
+  # Shift indels to the most 3' position within the codon
+  # Recommended: true (improves annotation consistency)
+  shift_3prime: true
+  
+  # Add HGVS (Human Genome Variation Society) nomenclature
+  # Provides standardized variant nomenclature
+  hgvs: true
+  
+  # Additional VEP command-line options
+  # Example: "--check_existing --check_alleles"
+  extra: ""
+
+
+# ----------------------------------------------------------------------------
+# Candidate Mutations Analysis
+# ----------------------------------------------------------------------------
 candidate_mutations:
-  # Minimum depth in the samples to consider a variant
+  # Minimum read depth required to consider a variant
+  # Variants with depth below this threshold are filtered out
   min_dp: 10
-  # Minimum difference in allele frequency between WT and Mutant to report a variant
+  
+  # Minimum absolute delta SNP index to report a variant in the output TSV
+  # Delta = |ALT_frequency_mutant - ALT_frequency_WT|
+  # Higher values = more stringent filtering (fewer candidates)
   report_delta: 0.9
-  # Minimum difference in allele frequency between WT and Mutant to plot a variant
+  
+  # Minimum absolute delta SNP index to include a variant in plots
+  # Should be <= report_delta
+  # Lower values = more variants plotted (useful for visualization)
   plot_delta: 0.5
-  # Set true to not reporting variants in masked regions
-  skip_masked: False
-  # Set true to keep all annotations from VEP in the final table
-  keep_all_annotations: True
-  # You can set different delta thresholds for different sequences (e.g. organellar genomes)
-  #delta_seq_name:
-  #  chr_1 : 0.5
-  #  mitogenome : 0.05
-  #  plastome : 0.05
+  
+  # Skip variants that have been marked as filtered in the VCF
+  # Set to true to exclude variants in masked regions
+  skip_masked: false
+  
+  # Keep all VEP annotations or only the most severe per variant
+  # true = keep all annotations (one row per transcript/annotation)
+  # false = keep only the most severe annotation per variant
+  keep_all_annotations: true
+  
+  # Sequence-specific delta thresholds (optional)
+  # Useful for organellar genomes (mitochondria, chloroplast) that may have
+  # different inheritance patterns and require lower thresholds
+  # Uncomment and modify as needed:
+  # delta_seq_name:
+  #   chromosome_01: 0.5
+  #   chromosome_02: 0.5
+  #   mitogenome: 0.05
+  #   plastome: 0.05
+  delta_seq_name: {}

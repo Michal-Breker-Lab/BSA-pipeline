@@ -1,0 +1,7 @@
+channels:
+  - conda-forge
+  - bioconda
+  - nodefaults
+dependencies:
+  - ncbi-datasets-cli =18.9.0
+  - biopython =1.85

@@ -1,15 +1,62 @@
 import pandas as pd
 from pathlib import Path
 
+
 samples = pd.read_csv(config["samples"], dtype=str, comment="#").set_index(
     "sample_name", drop=False
 )
 experiments = samples["Experiment"].dropna().unique()
+ncbi_assemblies = config["ref"].get("ncbi", {}).get("assemblies", [])
+ncbi_sequences = config["ref"].get("ncbi", {}).get("sequences", [])
+
 
 wildcard_constraints:
     sample="|".join(samples["sample_name"].tolist()),
     fq="R1|R2|single",
     experiment="|".join(experiments),
+
+
+def get_ref_fasta(wildcards):
+    cfg_ref = config["ref"]
+    cfg_fasta = cfg_ref.get("fasta", None)
+
+    if cfg_fasta:
+        if not Path(cfg_fasta).exists():
+            raise ValueError(f"The specified reference FASTA file does not exist: {cfg_fasta}")
+        return cfg_fasta
+    elif ncbi_assemblies or ncbi_sequences:
+        return "resources/ref/ncbi_ref.fa"
+    else:
+        raise ValueError("No reference FASTA file or NCBI accession was provided in the config.")
+
+
+def get_annot_gff(wildcards):
+    fasta_provided = config["ref"].get("fasta", None)
+    # Use gff param only if fasta file provided
+    if fasta_provided and config["ref"].get("gff", None):
+        gff = config["ref"]["gff"]
+        if not Path(gff).exists():
+            raise ValueError(f"The specified GFF file does not exist: {gff}")
+        return gff
+    # Use NCBI GFF file only if there is no "fasta" file
+    elif not fasta_provided and (ncbi_assemblies or ncbi_sequences):
+        return "resources/ref/ncbi_annot.gff"
+
+
+def get_masked_regions_bed(wildcards):
+    if not config["ref"].get("fasta", None):
+        return "resources/ref/masked_regions_reference.bed"
+
+    mask_file = Path(config["ref"].get("masked_regions", "resources/ref/masked_regions_reference.bed"))
+    if mask_file.suffix == ".bed":
+        return mask_file
+    elif mask_file.suffix in [".gff3", ".gff"]:
+        return f"resources/masked_any2bed/masked_gff2bed.bed"
+    else:
+        raise ValueError(
+            f"Invalid file extension '{mask_file.suffix}'. "
+            "Only .bed, .gff and .gff3 file extensions are supported."
+        )
 
 
 def is_single(sample_name):
@@ -46,13 +93,14 @@ def get_fastqc_raw_reads(wildcards):
 
 
 def get_bam(wildcards):
-    if config["remove_duplicates"]:
+    if config.get("remove_duplicates"):
         return f"results/mapping/{wildcards.sample}.dedup.bam"
     else:
         return f"results/mapping/{wildcards.sample}.bam"
 
+
 def get_bai(wildcards):
-    if config["remove_duplicates"]:
+    if config.get("remove_duplicates"):
         return f"results/mapping/{wildcards.sample}.dedup.bam.bai"
     else:
         return f"results/mapping/{wildcards.sample}.bam.bai"
@@ -60,7 +108,7 @@ def get_bai(wildcards):
 
 def get_bams_experiment(wildcards):
     experiment_df = samples.loc[samples["Experiment"] == wildcards.experiment]
-    dedup = ".dedup" if config["remove_duplicates"] else ""
+    dedup = ".dedup" if config.get("remove_duplicates") else ""
     return expand(
         f"results/mapping/{{sample}}{dedup}.bam", sample=experiment_df.index
     )
@@ -68,55 +116,28 @@ def get_bams_experiment(wildcards):
 
 def get_bai_experiment(wildcards):
     experiment_df = samples.loc[samples["Experiment"] == wildcards.experiment]
-    dedup = ".dedup" if config["remove_duplicates"] else ""
+    dedup = ".dedup" if config.get("remove_duplicates") else ""
     return expand(
         f"results/mapping/{{sample}}{dedup}.bam.bai", sample=experiment_df.index
     )
 
-def get_annotation_input(wildcards):
-    if config.get("regions_to_mask"):
-        return "results/calling/{experiment}.overlaps.vcf.gz"
 
+def get_annotation_input(wildcards):
+    if config["mask_regions"]:
+        return "results/calling/{experiment}.masked.vcf.gz"
     return "results/calling/{experiment}.norm.vcf.gz"
 
 
 def get_candidate_mutations_input(wildcards):
-    if config.get("gff_annotation", {}):
+    if config["annotate"] and get_annot_gff(wildcards):
         return "results/calling/{experiment}.annot.vcf.gz"
-
     return get_annotation_input(wildcards)
-
-def get_regions_to_mask(wildcards):
-    if config.get("regions_to_mask"):
-        return get_bed(wildcards)
-
-    return None
-
-
-def get_bed(wildcards):
-    masking_file = Path(config["regions_to_mask"])
-    if masking_file.suffix == ".bed":
-        return config["regions_to_mask"]
-    elif masking_file.suffix in [".gff3", ".gff"]:
-        return f"resources/regions_bed/{masking_file.stem}.bed"
-    else:
-        raise ValueError(
-            f"Invalid file extension '{masking_file.suffix}'. "
-            "Only .bed and .gff files are supported."
-        )
 
 
 def get_wt_samples(wildcards):
     experiment_df = samples.loc[samples["Experiment"] == wildcards.experiment]
     wt_samples = experiment_df.index[experiment_df["Condition"] == "WT"].tolist()
     return wt_samples if wt_samples else None
-
-
-def get_vcf_to_analyze(wildcard):
-    if config["gff_annotation"]:
-        return "results/calling/{experiment}.annot.vcf.gz"
-
-    return "results/calling/{experiment}.norm.vcf.gz"
 
 
 def multiqc_input(wildcards):
@@ -138,14 +159,12 @@ def multiqc_input(wildcards):
             fq=["R1", "R2"],
         )
     )
-
     output.extend(
         expand(
             "results/qc/trimming/{sample}.json",
             sample=experiment_df.index,
         )
     )
-
     output.extend(
         expand(
             "results/qc/fastqc_trimmed/{sample}_single_fastqc.zip",
@@ -202,31 +221,25 @@ def multiqc_input(wildcards):
                 sample=experiment_df.index,
             )
         )
+    
     return output
 
 
 def get_final_output(wildcards):
     output = []
-
+    
     output.extend(
         expand(
             "results/qc/multiqc_{experiment}.html",
             experiment=experiments
         )
     )
-    output.extend(
-        expand(
-            "results/calling/{experiment}.annot.vcf.gz",
-            experiment=experiments
-        )
-    )
-    
+
     output.extend(
         expand(
             "results/candidate_mutations/{experiment}.tsv",
             experiment=experiments,
         )
     )
-    
 
     return output
