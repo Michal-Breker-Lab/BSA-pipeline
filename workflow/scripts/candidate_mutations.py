@@ -12,8 +12,15 @@ Key features:
 - Supports both wild-type specified and wild-type inferred modes
 """
 
-from snakemake.script import snakemake
+from typing import TYPE_CHECKING
 import sys
+
+if TYPE_CHECKING:
+    from snakemake.script import Snakemake
+
+# Snakemake binds this in the module globals via the preamble it prepends to
+# script: rules; the bare annotation declares it without a runtime import.
+snakemake: "Snakemake"
 
 # Redirect stdout to log file for Snakemake logging
 sys.stderr = sys.stdout

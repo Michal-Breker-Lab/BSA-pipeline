@@ -1,4 +1,4 @@
-from snakemake.script import snakemake
+from typing import TYPE_CHECKING
 from pathlib import Path
 import subprocess
 import tempfile
@@ -8,6 +8,13 @@ from Bio import Entrez
 import subprocess
 import time
 import sys
+
+if TYPE_CHECKING:
+    from snakemake.script import Snakemake
+
+# Snakemake binds this in the module globals via the preamble it prepends to
+# script: rules; the bare annotation declares it without a runtime import.
+snakemake: "Snakemake"
 
 
 log = open(snakemake.log[0], "w")

@@ -1,5 +1,14 @@
-from snakemake.script import snakemake
+from typing import TYPE_CHECKING
+
+# shell is a genuine module attribute, so this import is safe at runtime.
 from snakemake.shell import shell
+
+if TYPE_CHECKING:
+    from snakemake.script import Snakemake
+
+# Snakemake binds this in the module globals via the preamble it prepends to
+# script: rules; the bare annotation declares it without a runtime import.
+snakemake: "Snakemake"
 import tempfile
 import pandas as pd
 

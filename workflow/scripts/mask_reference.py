@@ -1,5 +1,15 @@
-from snakemake.script import snakemake
+from typing import TYPE_CHECKING
 import sys
+
+if TYPE_CHECKING:
+    from snakemake.script import Snakemake
+
+# Snakemake binds this object in the module globals through the preamble it
+# prepends to script: rules. The bare annotation declares it for type checkers
+# and linters without importing or assigning anything at runtime -- importing
+# the name works only because that preamble mutates snakemake.script, which
+# breaks editors, linting and any standalone run of this file.
+snakemake: "Snakemake"
 
 sys.stdout = sys.stderr
 sys.stderr = sys.stdout = open(snakemake.log[0], "w")
