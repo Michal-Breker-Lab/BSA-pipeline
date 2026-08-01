@@ -1,6 +1,6 @@
 configfile: "config/config.yaml"
 
-container: "docker://continuumio/miniconda3"
+container: "docker://condaforge/miniforge3:25.11.0-0"
 
 include: "rules/common.smk"
 include: "rules/ref.smk"
