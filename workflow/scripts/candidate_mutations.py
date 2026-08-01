@@ -36,6 +36,43 @@ matplotlib.rcParams["pdf.fonttype"] = 42
 matplotlib.rcParams["ps.fonttype"] = 42
 matplotlib.rcParams["svg.fonttype"] = "none"
 
+# Arial, with metric-compatible fallbacks. Arial itself is proprietary and
+# comes from the 'mscorefonts' package in this rule's conda environment;
+# Liberation Sans and Arimo are metrically identical to it, so a fallback
+# changes the glyph shapes slightly but not the layout, and text can be
+# reset to Arial in Illustrator without reflowing.
+matplotlib.rcParams["font.family"] = "sans-serif"
+matplotlib.rcParams["font.sans-serif"] = [
+    "Arial",
+    "Liberation Sans",
+    "Arimo",
+    "Helvetica",
+    "Nimbus Sans",
+    "DejaVu Sans",
+]
+# Use ASCII hyphen rather than U+2212 MINUS: the Unicode minus is a common
+# cause of missing glyphs and copy-paste surprises in Adobe applications.
+matplotlib.rcParams["axes.unicode_minus"] = False
+
+# Font fallback is silent by default, which is how a whole batch of figures
+# ends up in the wrong typeface unnoticed. Resolve it once and say so.
+from matplotlib import font_manager
+
+# Pass the family list, not the string "sans-serif": a bare string containing
+# a hyphen is parsed as a fontconfig pattern and raises. The list is also what
+# we actually want resolved -- findfont returns the first name available.
+_font_path = font_manager.findfont(
+    font_manager.FontProperties(family=matplotlib.rcParams["font.sans-serif"])
+)
+_font_name = font_manager.FontProperties(fname=_font_path).get_name()
+print(f"Plot font resolved to: {_font_name} ({_font_path})")
+if _font_name != "Arial":
+    print(
+        f"WARNING: Arial was not found in this environment; figures use "
+        f"{_font_name} instead. Install the 'mscorefonts' conda package to "
+        f"get genuine Arial."
+    )
+
 import matplotlib.pyplot as plt
 from matplotlib.lines import Line2D
 

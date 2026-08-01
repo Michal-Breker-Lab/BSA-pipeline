@@ -6,4 +6,10 @@ dependencies:
   - pandas=2.3.1
   - matplotlib=3.10.5
   - cyvcf2=0.31.1
+  # Supplies genuine Arial for the figures. Arial is proprietary, so this
+  # package fetches the Microsoft core fonts under their EULA at install
+  # time -- it therefore needs network access when the environment is built.
+  # Without it the plots fall back to Liberation Sans (Arial-metric) and the
+  # script logs a warning.
+  - mscorefonts=0.0.1
   
