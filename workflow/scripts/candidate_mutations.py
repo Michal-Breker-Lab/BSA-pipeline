@@ -24,6 +24,18 @@ from cyvcf2 import VCF
 from pathlib import Path
 import pandas as pd
 import numpy as np
+import matplotlib
+
+matplotlib.use("Agg")  # headless: no display needed, silences Qt plugin warnings
+
+# Keep vector output editable in Adobe Illustrator:
+# fonttype 42 embeds TrueType so glyphs stay real, selectable text rather than
+# being converted to outlines (the default Type 3 does not open cleanly in
+# Illustrator). svg.fonttype "none" leaves text as <text> elements.
+matplotlib.rcParams["pdf.fonttype"] = 42
+matplotlib.rcParams["ps.fonttype"] = 42
+matplotlib.rcParams["svg.fonttype"] = "none"
+
 import matplotlib.pyplot as plt
 from matplotlib.lines import Line2D
 
@@ -427,10 +439,13 @@ for chr, sample in plot_df[['CHROM', 'Sample']].drop_duplicates().values:
     )
     plt.tight_layout()
     
-    # Save plot in both PNG (raster) and SVG (vector) formats
+    # Save as PNG (raster preview) plus PDF and SVG (fully vector, text kept
+    # as text -- see the rcParams above). No artist is rasterized, so the
+    # vector outputs contain no embedded bitmaps.
     stem = safe_filename(sample, chr)
     plt.savefig(plot_dir / f"{stem}.png", dpi=300)
-    plt.savefig(plot_dir / f"{stem}.svg", dpi=300)
+    plt.savefig(plot_dir / f"{stem}.pdf")
+    plt.savefig(plot_dir / f"{stem}.svg")
     plt.close()
 
 # Write summary info file
